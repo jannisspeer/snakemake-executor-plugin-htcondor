@@ -1,0 +1,24 @@
+[build-system]
+requires = [ "poetry-core",]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "snakemake-executor-plugin-htcondor"
+version = "0.1.0"
+description = ""
+authors = [ "jannisspeer <jannis.speer@tutanota.com>",]
+readme = "README.md"
+repository = "https://github.com/jannisspeer/snakemake-executor-plugin-htcondor"
+documentation = "https://snakemake.github.io/snakemake-plugin-catalog/plugins/executor/htcondor.html"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+snakemake-interface-common = "^1.17.1"
+snakemake-interface-executor-plugins = "^9.0.0"
+
+[tool.poetry.group.dev.dependencies]
+black = "^24.2.0"
+flake8 = "^7.0.0"
+coverage = "^7.4.3"
+pytest = "^8.1.1"
+snakemake = "^8.6.0"
