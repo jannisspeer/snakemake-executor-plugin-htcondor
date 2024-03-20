@@ -71,6 +71,7 @@ class Executor(RemoteExecutor):
         self.workflow.executor_settings
 
     def run_job(self, job: JobExecutorInterface):
+        # Submitting job to HTCondor
 
         print(job)
         print(job.name)
@@ -141,28 +142,16 @@ class Executor(RemoteExecutor):
     ) -> Generator[SubmittedJobInfo, None, None]:
         # Check the status of active jobs.
 
-        # You have to iterate over the given list active_jobs.
-        # If you provided it above, each will have its external_jobid set according
-        # to the information you provided at submission time.
-        # For jobs that have finished successfully, you have to call
-        # self.report_job_success(active_job).
-        # For jobs that have errored, you have to call
-        # self.report_job_error(active_job).
-        # This will also take care of providing a proper error message.
-        # Usually there is no need to perform additional logging here.
-        # Jobs that are still running have to be yielded.
-        #
-        # For queries to the remote middleware, please use
-        # self.status_rate_limiter like this:
-        #
-        # async with self.status_rate_limiter:
-        #    # query remote middleware here
-        #
-        # To modify the time until the next call of this method,
-        # you can set self.next_sleep_seconds here.
         pass
 
     def cancel_jobs(self, active_jobs: List[SubmittedJobInfo]):
         # Cancel all active jobs.
         # This method is called when Snakemake is interrupted.
-        pass
+
+        if active_jobs:
+            schedd = htcondor.Schedd()
+            job_ids = [current_job.external_jobid for current_job in active_jobs]
+            try:
+                schedd.act(htcondor.JobAction.Remove, job_ids)
+            except Exception as e:
+                self.logger.warning(f"Failed to cancel HTCondor jobs: {e}")
