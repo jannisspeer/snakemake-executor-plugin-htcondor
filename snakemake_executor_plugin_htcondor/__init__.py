@@ -11,6 +11,9 @@ from snakemake_interface_executor_plugins.jobs import (
 )
 from snakemake_interface_common.exceptions import WorkflowError  # noqa
 
+import htcondor
+from os.path import join
+from os import makedirs
 
 # Optional:
 # Define additional settings for your executor.
@@ -20,25 +23,10 @@ from snakemake_interface_common.exceptions import WorkflowError  # noqa
 # of None or anything else that makes sense in your case.
 @dataclass
 class ExecutorSettings(ExecutorSettingsBase):
-    myparam: Optional[int] = field(
-        default=None,
+    jobdir: int = field(
+        default=".snakemake/conda",
         metadata={
-            "help": "Some help text",
-            # Optionally request that setting is also available for specification
-            # via an environment variable. The variable will be named automatically as
-            # SNAKEMAKE_<executor-name>_<param-name>, all upper case.
-            # This mechanism should only be used for passwords and usernames.
-            # For other items, we rather recommend to let people use a profile
-            # for setting defaults
-            # (https://snakemake.readthedocs.io/en/stable/executing/cli.html#profiles).
-            "env_var": False,
-            # Optionally specify a function that parses the value given by the user.
-            # This is useful to create complex types from the user input.
-            "parse_func": ...,
-            # If a parse_func is specified, you also have to specify an unparse_func
-            # that converts the parsed value back to a string.
-            "unparse_func": ...,
-            # Optionally specify that setting is required when the executor is in use.
+            "help": "Directory where the job will create a directory to store log, output and error files. ",
             "required": True,
         },
     )
@@ -82,34 +70,71 @@ class Executor(RemoteExecutor):
         # access executor specific settings
         self.workflow.executor_settings
 
-        # IMPORTANT: in your plugin, only access methods and properties of
-        # Snakemake objects (like Workflow, Persistence, etc.) that are
-        # defined in the interfaces found in the
-        # snakemake-interface-executor-plugins and the
-        # snakemake-interface-common package.
-        # Other parts of those objects are NOT guaranteed to remain
-        # stable across new releases.
-
-        # To ensure that the used interfaces are not changing, you should
-        # depend on these packages as >=a.b.c,<d with d=a+1 (i.e. pin the
-        # dependency on this package to be at least the version at time
-        # of development and less than the next major version which would
-        # introduce breaking changes).
-
-        # In case of errors outside of jobs, please raise a WorkflowError
-
     def run_job(self, job: JobExecutorInterface):
-        # Implement here how to run a job.
-        # You can access the job's resources, etc.
-        # via the job object.
-        # After submitting the job, you have to call
-        # self.report_job_submission(job_info).
-        # with job_info being of type
-        # snakemake_interface_executor_plugins.executors.base.SubmittedJobInfo.
-        # If required, make sure to pass the job's id to the job_info object, as keyword
-        # argument 'external_job_id'.
 
-        ...
+        print(job)
+        print(job.name)
+        print(job.resources)
+
+        # Creating directory to store log, output and error files
+        jobDir = self.workflow.executor_settings.jobdir
+        makedirs(jobDir, exist_ok=True)
+
+        # Creating submit dictionary which is passed to htcondor.Submit
+        submit_dict = {
+            "executable": "/bin/bash",
+            "arguments": self.format_job_exec(job), # using the method from RemoteExecutor
+            "log": join(jobDir, '$(ClusterId).log'),
+            "output": join(jobDir, '$(ClusterId).out'),
+            "error": join(jobDir, '$(ClusterId).err'),
+        }
+
+        # Basic commands
+        if job.resources.get("getenv"):
+            submit_dict["getenv"] = job.resources.get("getenv")
+        else:
+            submit_dict["getenv"] = True
+
+        for key in ["environment", "input", "max_materialize", "max_idle"]:
+            if job.resources.get(key):
+                submit_dict[key] = job.resources.get(key)
+
+        # Commands for matchmaking
+        for key in ["rank", "request_cpus", "request_disk", "request_memory", "requirements"]:
+            if job.resources.get(key):
+                submit_dict[key] = job.resources.get(key)
+
+        # Commands for matchmaking (GPU)
+        for key in ["request_gpus", "require_gpus", "gpus_minimum_capability", "gpus_minimum_memory ", "gpus_minimum_runtime", "cuda_version"]:
+            if job.resources.get(key):
+                submit_dict[key] = job.resources.get(key)
+
+        # Policy commands
+        if job.resources.get("max_retries"):
+            submit_dict["max_retries"] = job.resources.get("max_retries")
+        else:
+            submit_dict["max_retries"] = 5
+
+        for key in ["allowed_execute_duration", "allowed_job_duration", "retry_until"]:
+            if job.resources.get(key):
+                submit_dict[key] = job.resources.get(key)
+
+        # HTCondor submit description
+        self.logger.debug(f"HTCondor submit subscription: {submit_dict}")
+        submit_description = htcondor.Submit(submit_dict)
+
+        # Client for HTCondor Schedduler
+        schedd = htcondor.Schedd()
+
+        # Submitting job to HTCondor
+        try:
+            clusterID = schedd.submit(submit_description)
+        except Exception as e:
+            raise WorkflowError(f"Failed to submit HTCondor job: {e}")
+
+        self.report_job_submission(SubmittedJobInfo(job=job, external_jobid=clusterID))
+
+
 
     async def check_active_jobs(
         self, active_jobs: List[SubmittedJobInfo]
@@ -135,9 +160,9 @@ class Executor(RemoteExecutor):
         #
         # To modify the time until the next call of this method,
         # you can set self.next_sleep_seconds here.
-        ...
+        pass
 
     def cancel_jobs(self, active_jobs: List[SubmittedJobInfo]):
         # Cancel all active jobs.
         # This method is called when Snakemake is interrupted.
-        ...
+        pass
