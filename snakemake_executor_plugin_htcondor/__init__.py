@@ -15,6 +15,7 @@ import htcondor
 from os.path import join
 from os import makedirs
 
+
 # Optional:
 # Define additional settings for your executor.
 # They will occur in the Snakemake CLI as --<executor-name>-<param-name>
@@ -84,10 +85,12 @@ class Executor(RemoteExecutor):
         # Creating submit dictionary which is passed to htcondor.Submit
         submit_dict = {
             "executable": "/bin/bash",
-            "arguments": self.format_job_exec(job), # using the method from RemoteExecutor
-            "log": join(jobDir, '$(ClusterId).log'),
-            "output": join(jobDir, '$(ClusterId).out'),
-            "error": join(jobDir, '$(ClusterId).err'),
+            "arguments": self.format_job_exec(
+                job
+            ),  # using the method from RemoteExecutor
+            "log": join(jobDir, "$(ClusterId).log"),
+            "output": join(jobDir, "$(ClusterId).out"),
+            "error": join(jobDir, "$(ClusterId).err"),
         }
 
         # Basic commands
@@ -101,12 +104,25 @@ class Executor(RemoteExecutor):
                 submit_dict[key] = job.resources.get(key)
 
         # Commands for matchmaking
-        for key in ["rank", "request_cpus", "request_disk", "request_memory", "requirements"]:
+        for key in [
+            "rank",
+            "request_cpus",
+            "request_disk",
+            "request_memory",
+            "requirements",
+        ]:
             if job.resources.get(key):
                 submit_dict[key] = job.resources.get(key)
 
         # Commands for matchmaking (GPU)
-        for key in ["request_gpus", "require_gpus", "gpus_minimum_capability", "gpus_minimum_memory ", "gpus_minimum_runtime", "cuda_version"]:
+        for key in [
+            "request_gpus",
+            "require_gpus",
+            "gpus_minimum_capability",
+            "gpus_minimum_memory ",
+            "gpus_minimum_runtime",
+            "cuda_version",
+        ]:
             if job.resources.get(key):
                 submit_dict[key] = job.resources.get(key)
 
@@ -135,8 +151,6 @@ class Executor(RemoteExecutor):
 
         self.report_job_submission(SubmittedJobInfo(job=job, external_jobid=clusterID))
 
-
-
     async def check_active_jobs(
         self, active_jobs: List[SubmittedJobInfo]
     ) -> Generator[SubmittedJobInfo, None, None]:
@@ -147,12 +161,17 @@ class Executor(RemoteExecutor):
                 # Get the status of the job
                 try:
                     schedd = htcondor.Schedd()
-                    job_status = schedd.query(constraint=f"ClusterId == {current_job.external_jobid}", projection=["JobStatus"])
+                    job_status = schedd.query(
+                        constraint=f"ClusterId == {current_job.external_jobid}",
+                        projection=["JobStatus"],
+                    )
                 except Exception as e:
                     self.logger.warning(f"Failed to retrieve HTCondor job status: {e}")
                     # Assuming the job is still running and retry next time
                     yield current_job
-                self.logger.debug(f"HTCondor job {current_job.external_jobid} status: {job_status}")
+                self.logger.debug(
+                    f"HTCondor job {current_job.external_jobid} status: {job_status}"
+                )
 
                 # Overview of HTCondor job status:
                 # 1: Idle
@@ -166,7 +185,9 @@ class Executor(RemoteExecutor):
                 # Running/idle jobs
                 if job_status[0]["JobStatus"] in [1, 2, 6, 7]:
                     if job_status[0]["JobStatus"] in [7]:
-                        self.logger.warning(f"HTCondor job {current_job.external_jobid} is suspended.")
+                        self.logger.warning(
+                            f"HTCondor job {current_job.external_jobid} is suspended."
+                        )
                     yield current_job
                 # Successful jobs
                 elif job_status[0]["JobStatus"] in [4]:
@@ -175,7 +196,9 @@ class Executor(RemoteExecutor):
                 elif job_status[0]["JobStatus"] in [3, 5]:
                     self.report_job_error(current_job)
                 else:
-                    raise WorkflowError(f"Unknown HTCondor job status: {job_status[0]['JobStatus']}")
+                    raise WorkflowError(
+                        f"Unknown HTCondor job status: {job_status[0]['JobStatus']}"
+                    )
 
     def cancel_jobs(self, active_jobs: List[SubmittedJobInfo]):
         # Cancel all active jobs.
