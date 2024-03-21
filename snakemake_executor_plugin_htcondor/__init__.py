@@ -159,7 +159,6 @@ class Executor(RemoteExecutor):
 
                 # Event types that report an error
                 error_event_type = [
-                    htcondor.JobEventType.JOB_EVICTED,
                     htcondor.JobEventType.JOB_ABORTED,
                     htcondor.JobEventType.JOB_HELD,
                     htcondor.JobEventType.EXECUTABLE_ERROR,
@@ -174,6 +173,11 @@ class Executor(RemoteExecutor):
                     htcondor.JobEventType.SUBMIT,
                     htcondor.JobEventType.EXECUTE,
                     htcondor.JobEventType.IMAGE_SIZE,
+                ]
+
+                warning_event_type = [
+                    htcondor.JobEventType.JOB_EVICTED,
+                    htcondor.JobEventType.JOB_SUSPENDED,
                 ]
 
                 # Look in the log file to check the status of the job
@@ -197,6 +201,12 @@ class Executor(RemoteExecutor):
                 elif latest_event.type in running_event_type:
                     # Job is still running/idle
                     self.logger.debug(
+                        f"HTCondor job {current_job.external_jobid} has JobEventType {latest_event.type}."
+                    )
+                    yield current_job
+                elif latest_event.type in warning_event_type:
+                    # Job has a warning
+                    self.logger.warning(
                         f"HTCondor job {current_job.external_jobid} has JobEventType {latest_event.type}."
                     )
                     yield current_job
