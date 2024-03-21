@@ -75,10 +75,6 @@ class Executor(RemoteExecutor):
     def run_job(self, job: JobExecutorInterface):
         # Submitting job to HTCondor
 
-        print(job)
-        print(job.name)
-        print(job.resources)
-
         # Creating directory to store log, output and error files
         jobDir = self.workflow.executor_settings.jobdir
         makedirs(jobDir, exist_ok=True)
@@ -146,11 +142,11 @@ class Executor(RemoteExecutor):
 
         # Submitting job to HTCondor
         try:
-            clusterID = schedd.submit(submit_description)
+            submit_result = schedd.submit(submit_description)
         except Exception as e:
             raise WorkflowError(f"Failed to submit HTCondor job: {e}")
 
-        self.report_job_submission(SubmittedJobInfo(job=job, external_jobid=clusterID))
+        self.report_job_submission(SubmittedJobInfo(job=job, external_jobid=submit_result.cluster()))
 
     async def check_active_jobs(
         self, active_jobs: List[SubmittedJobInfo]
@@ -208,6 +204,8 @@ class Executor(RemoteExecutor):
         if active_jobs:
             schedd = htcondor.Schedd()
             job_ids = [current_job.external_jobid for current_job in active_jobs]
+            # For some reason HTCondor requires not the BATCH_NAME but the full JOB_IDS
+            job_ids = [f"ClusterId == {x}.0" for x in job_ids]
             self.logger.debug(f"Cancelling HTCondor jobs: {job_ids}")
             try:
                 schedd.act(htcondor.JobAction.Remove, job_ids)
