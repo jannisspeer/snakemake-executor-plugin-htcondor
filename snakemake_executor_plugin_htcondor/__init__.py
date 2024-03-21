@@ -180,36 +180,39 @@ class Executor(RemoteExecutor):
                 logFileName = join(self.jobDir, f"{current_job.external_jobid}.log")
                 jel = htcondor.JobEventLog(logFileName)
 
+                # Get the latest event from the iterator
                 for event in jel.events(stop_after=0):
-                    if event.type in error_event_type:
-                        # Job has an error
-                        self.logger.debug(
-                            f"HTCondor job {current_job.external_jobid} has JovEventType {event.type}."
+                    latest_event = event
+
+                if latest_event.type in error_event_type:
+                    # Job has an error
+                    self.logger.debug(
+                        f"HTCondor job {current_job.external_jobid} has JobEventType {latest_event.type}."
+                    )
+                    self.report_job_error(
+                        current_job,
+                        msg=f"HTCondor job {current_job.external_jobid} has JobEventType {latest_event.type}. "
                         )
-                        self.report_job_error(
-                            current_job,
-                            msg=f"HTCondor job {current_job.external_jobid} has JovEventType {event.type}. "
-                            )
-                        break
-                    elif event.type in running_event_type:
-                        # Job is still running/idle
-                        self.logger.debug(
-                            f"HTCondor job {current_job.external_jobid} has JovEventType {event.type}."
-                        )
-                        yield current_job
-                    elif event.type in success_event_type:
-                        # Job is terminated
-                        self.logger.debug(
-                            f"HTCondor job {current_job.external_jobid} has JovEventType {event.type}."
-                        )
-                        self.report_job_success(current_job)
-                    else:
-                        # Unsupported event type
-                        self.logger.debug(
-                            f"HTCondor job {current_job.external_jobid} has JovEventType {event.type}."
-                            "This event type is not supported."
-                        )
-                        yield current_job
+                    break
+                elif latest_event.type in running_event_type:
+                    # Job is still running/idle
+                    self.logger.debug(
+                        f"HTCondor job {current_job.external_jobid} has JobEventType {latest_event.type}."
+                    )
+                    yield current_job
+                elif latest_event.type in success_event_type:
+                    # Job is terminated
+                    self.logger.debug(
+                        f"HTCondor job {current_job.external_jobid} has JobEventType {latest_event.type}."
+                    )
+                    self.report_job_success(current_job)
+                else:
+                    # Unsupported event type
+                    self.logger.debug(
+                        f"HTCondor job {current_job.external_jobid} has JobEventType {latest_event.type}."
+                        "This event type is not supported."
+                    )
+                    yield current_job
 
     def cancel_jobs(self, active_jobs: List[SubmittedJobInfo]):
         # Cancel all active jobs.
