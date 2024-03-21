@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Generator, Optional
+from typing import List, Generator
 from snakemake_interface_executor_plugins.executors.base import SubmittedJobInfo
 from snakemake_interface_executor_plugins.executors.remote import RemoteExecutor
 from snakemake_interface_executor_plugins.settings import (
@@ -27,7 +27,8 @@ class ExecutorSettings(ExecutorSettingsBase):
     jobdir: int = field(
         default=".snakemake/conda",
         metadata={
-            "help": "Directory where the job will create a directory to store log, output and error files. ",
+            "help": "Directory where the job will create a directory to store log, "
+            "output and error files.",
             "required": True,
         },
     )
