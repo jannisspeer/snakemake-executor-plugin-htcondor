@@ -80,12 +80,13 @@ class Executor(RemoteExecutor):
         # Creating directory to store log, output and error files
         makedirs(self.jobDir, exist_ok=True)
 
+        job_exec = self.get_python_executable()
+        job_args = self.format_job_exec(job).removeprefix(job_exec+" ")
+
         # Creating submit dictionary which is passed to htcondor.Submit
         submit_dict = {
-            "executable": "/bin/bash",
-            "arguments": self.format_job_exec(
-                job
-            ),  # using the method from RemoteExecutor
+            "executable": job_exec,
+            "arguments": job_args,
             "log": join(self.jobDir, "$(ClusterId).log"),
             "output": join(self.jobDir, "$(ClusterId).out"),
             "error": join(self.jobDir, "$(ClusterId).err"),
