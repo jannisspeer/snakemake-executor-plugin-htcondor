@@ -1,6 +1,8 @@
-from typing import Optional
+from typing import Optional, Mapping
 import snakemake.common.tests
 from snakemake_interface_executor_plugins.settings import ExecutorSettingsBase
+from snakemake_interface_common.plugin_registry.plugin import TaggedSettings
+from snakemake_executor_plugin_htcondor import ExecutorSettings
 
 
 # Check out the base classes found here for all possible options and methods:
@@ -13,4 +15,15 @@ class TestWorkflowsBase(snakemake.common.tests.TestWorkflowsBase):
 
     def get_executor_settings(self) -> Optional[ExecutorSettingsBase]:
         # instantiate ExecutorSettings of this plugin as appropriate
-        ...
+        return ExecutorSettings()
+
+    def get_default_storage_prefix(self) -> Optional[str]:
+        return None
+
+    def get_default_storage_provider(self) -> Optional[str]:
+        return None
+
+    def get_default_storage_provider_settings(
+        self,
+    ) -> Optional[Mapping[str, TaggedSettings]]:
+        return None
