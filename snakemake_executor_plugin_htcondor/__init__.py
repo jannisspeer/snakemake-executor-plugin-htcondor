@@ -142,7 +142,40 @@ class Executor(RemoteExecutor):
     ) -> Generator[SubmittedJobInfo, None, None]:
         # Check the status of active jobs.
 
-        pass
+        for current_job in active_jobs:
+            async with self.status_rate_limiter:
+                # Get the status of the job
+                try:
+                    schedd = htcondor.Schedd()
+                    job_status = schedd.query(constraint=f"ClusterId == {current_job.external_jobid}", projection=["JobStatus"])
+                except Exception as e:
+                    self.logger.warning(f"Failed to retrieve HTCondor job status: {e}")
+                    # Assuming the job is still running and retry next time
+                    yield current_job
+                self.logger.debug(f"HTCondor job {current_job.external_jobid} status: {job_status}")
+
+                # Overview of HTCondor job status:
+                # 1: Idle
+                # 2: Running
+                # 3: Removed
+                # 4: Completed
+                # 5: Held
+                # 6: Transferring Output
+                # 7: Suspended
+
+                # Running/idle jobs
+                if job_status[0]["JobStatus"] in [1, 2, 6, 7]:
+                    if job_status[0]["JobStatus"] in [7]:
+                        self.logger.warning(f"HTCondor job {current_job.external_jobid} is suspended.")
+                    yield current_job
+                # Successful jobs
+                elif job_status[0]["JobStatus"] in [4]:
+                    self.report_job_success(current_job)
+                # Errored jobs
+                elif job_status[0]["JobStatus"] in [3, 5]:
+                    self.report_job_error(current_job)
+                else:
+                    raise WorkflowError(f"Unknown HTCondor job status: {job_status[0]['JobStatus']}")
 
     def cancel_jobs(self, active_jobs: List[SubmittedJobInfo]):
         # Cancel all active jobs.
@@ -151,6 +184,7 @@ class Executor(RemoteExecutor):
         if active_jobs:
             schedd = htcondor.Schedd()
             job_ids = [current_job.external_jobid for current_job in active_jobs]
+            self.logger.debug(f"Cancelling HTCondor jobs: {job_ids}")
             try:
                 schedd.act(htcondor.JobAction.Remove, job_ids)
             except Exception as e:
