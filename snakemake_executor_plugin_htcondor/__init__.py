@@ -24,10 +24,11 @@ from os import makedirs
 # of None or anything else that makes sense in your case.
 @dataclass
 class ExecutorSettings(ExecutorSettingsBase):
-    jobdir: int = field(
-        default=".snakemake/conda",
+    jobdir: Optional[str] = field(
+        default=".snakemake/htcondor",
         metadata={
-            "help": "Directory where the job will create a directory to store log, output and error files. ",
+            "help": "Directory where the job will create a directory to store log, "
+            "output and error files.",
             "required": True,
         },
     )
@@ -43,7 +44,7 @@ common_settings = CommonSettings(
     # are expected to specify False here.
     non_local_exec=True,
     # Whether the executor implies to not have a shared file system
-    implies_no_shared_fs=True,
+    implies_no_shared_fs=False,
     # whether to deploy workflow sources to default storage provider before execution
     job_deploy_sources=True,
     # whether arguments for setting the storage provider shall be passed to jobs
@@ -91,6 +92,7 @@ class Executor(RemoteExecutor):
             "log": join(jobDir, "$(ClusterId).log"),
             "output": join(jobDir, "$(ClusterId).out"),
             "error": join(jobDir, "$(ClusterId).err"),
+            "request_cpus": str(job.threads),
         }
 
         # Basic commands
@@ -106,7 +108,6 @@ class Executor(RemoteExecutor):
         # Commands for matchmaking
         for key in [
             "rank",
-            "request_cpus",
             "request_disk",
             "request_memory",
             "requirements",
