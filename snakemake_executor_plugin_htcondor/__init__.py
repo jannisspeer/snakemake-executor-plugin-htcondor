@@ -81,7 +81,7 @@ class Executor(RemoteExecutor):
         makedirs(self.jobDir, exist_ok=True)
 
         job_exec = self.get_python_executable()
-        job_args = self.format_job_exec(job).removeprefix(job_exec+" ")
+        job_args = self.format_job_exec(job).removeprefix(job_exec + " ")
 
         # Creating submit dictionary which is passed to htcondor.Submit
         submit_dict = {
@@ -148,7 +148,9 @@ class Executor(RemoteExecutor):
         except Exception as e:
             raise WorkflowError(f"Failed to submit HTCondor job: {e}")
 
-        self.report_job_submission(SubmittedJobInfo(job=job, external_jobid=submit_result.cluster()))
+        self.report_job_submission(
+            SubmittedJobInfo(job=job, external_jobid=submit_result.cluster())
+        )
 
     async def check_active_jobs(
         self, active_jobs: List[SubmittedJobInfo]
@@ -196,8 +198,8 @@ class Executor(RemoteExecutor):
                     )
                     self.report_job_error(
                         current_job,
-                        msg=f"HTCondor job {current_job.external_jobid} has JobEventType {latest_event.type}. "
-                        )
+                        msg=f"HTCondor job {current_job.external_jobid} has JobEventType {latest_event.type}. ",
+                    )
                     break
                 elif latest_event.type in running_event_type:
                     # Job is still running/idle
