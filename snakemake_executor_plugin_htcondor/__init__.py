@@ -72,12 +72,13 @@ class Executor(RemoteExecutor):
         # access executor specific settings
         self.workflow.executor_settings
 
+        self.jobDir = self.workflow.executor_settings.jobdir
+
     def run_job(self, job: JobExecutorInterface):
         # Submitting job to HTCondor
 
         # Creating directory to store log, output and error files
-        jobDir = self.workflow.executor_settings.jobdir
-        makedirs(jobDir, exist_ok=True)
+        makedirs(self.jobDir, exist_ok=True)
 
         # Creating submit dictionary which is passed to htcondor.Submit
         submit_dict = {
@@ -85,9 +86,9 @@ class Executor(RemoteExecutor):
             "arguments": self.format_job_exec(
                 job
             ),  # using the method from RemoteExecutor
-            "log": join(jobDir, "$(ClusterId).log"),
-            "output": join(jobDir, "$(ClusterId).out"),
-            "error": join(jobDir, "$(ClusterId).err"),
+            "log": join(self.jobDir, "$(ClusterId).log"),
+            "output": join(self.jobDir, "$(ClusterId).out"),
+            "error": join(self.jobDir, "$(ClusterId).err"),
             "request_cpus": str(job.threads),
         }
 
@@ -155,47 +156,60 @@ class Executor(RemoteExecutor):
 
         for current_job in active_jobs:
             async with self.status_rate_limiter:
-                # Get the status of the job
-                try:
-                    schedd = htcondor.Schedd()
-                    job_status = schedd.query(
-                        constraint=f"ClusterId == {current_job.external_jobid}",
-                        projection=["JobStatus"],
-                    )
-                except Exception as e:
-                    self.logger.warning(f"Failed to retrieve HTCondor job status: {e}")
-                    # Assuming the job is still running and retry next time
-                    yield current_job
-                self.logger.debug(
-                    f"HTCondor job {current_job.external_jobid} status: {job_status}"
-                )
 
-                # Overview of HTCondor job status:
-                # 1: Idle
-                # 2: Running
-                # 3: Removed
-                # 4: Completed
-                # 5: Held
-                # 6: Transferring Output
-                # 7: Suspended
+                # Event types that report an error
+                error_event_type = [
+                    htcondor.JobEventType.JOB_EVICTED,
+                    htcondor.JobEventType.JOB_ABORTED,
+                    htcondor.JobEventType.JOB_HELD,
+                    htcondor.JobEventType.EXECUTABLE_ERROR,
+                    htcondor.JobEventType.REMOTE_ERROR,
+                ]
 
-                # Running/idle jobs
-                if job_status[0]["JobStatus"] in [1, 2, 6, 7]:
-                    if job_status[0]["JobStatus"] in [7]:
-                        self.logger.warning(
-                            f"HTCondor job {current_job.external_jobid} is suspended."
+                # Event types that report a success
+                success_event_type = [htcondor.JobEventType.JOB_TERMINATED]
+
+                # Event types that report the job is running/other event is happening
+                running_event_type = [
+                    htcondor.JobEventType.SUBMIT,
+                    htcondor.JobEventType.EXECUTE,
+                    htcondor.JobEventType.IMAGE_SIZE,
+                ]
+
+                # Look in the log file to check the status of the job
+                logFileName = join(self.jobDir, f"{current_job.external_jobid}.log")
+                jel = htcondor.JobEventLog(logFileName)
+
+                for event in jel.events(stop_after=0):
+                    if event.type in error_event_type:
+                        # Job has an error
+                        self.logger.debug(
+                            f"HTCondor job {current_job.external_jobid} has JovEventType {event.type}."
                         )
-                    yield current_job
-                # Successful jobs
-                elif job_status[0]["JobStatus"] in [4]:
-                    self.report_job_success(current_job)
-                # Errored jobs
-                elif job_status[0]["JobStatus"] in [3, 5]:
-                    self.report_job_error(current_job)
-                else:
-                    raise WorkflowError(
-                        f"Unknown HTCondor job status: {job_status[0]['JobStatus']}"
-                    )
+                        self.report_job_error(
+                            current_job,
+                            msg=f"HTCondor job {current_job.external_jobid} has JovEventType {event.type}. "
+                            )
+                        break
+                    elif event.type in running_event_type:
+                        # Job is still running/idle
+                        self.logger.debug(
+                            f"HTCondor job {current_job.external_jobid} has JovEventType {event.type}."
+                        )
+                        yield current_job
+                    elif event.type in success_event_type:
+                        # Job is terminated
+                        self.logger.debug(
+                            f"HTCondor job {current_job.external_jobid} has JovEventType {event.type}."
+                        )
+                        self.report_job_success(current_job)
+                    else:
+                        # Unsupported event type
+                        self.logger.debug(
+                            f"HTCondor job {current_job.external_jobid} has JovEventType {event.type}."
+                            "This event type is not supported."
+                        )
+                        yield current_job
 
     def cancel_jobs(self, active_jobs: List[SubmittedJobInfo]):
         # Cancel all active jobs.
