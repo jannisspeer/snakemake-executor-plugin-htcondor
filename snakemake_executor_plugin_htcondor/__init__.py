@@ -83,6 +83,14 @@ class Executor(RemoteExecutor):
         job_exec = self.get_python_executable()
         job_args = self.format_job_exec(job).removeprefix(job_exec + " ")
 
+        # HTCondor cannot handle single quotes
+        if "'" in job_args:
+            job_args = job_args.replace("'", "")
+            self.logger.warning(
+                "The job argument contains a single quote. "
+                "Removing it to avoid issues with HTCondor."
+            )
+
         # Creating submit dictionary which is passed to htcondor.Submit
         submit_dict = {
             "executable": job_exec,
