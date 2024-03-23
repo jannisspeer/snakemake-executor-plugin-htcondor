@@ -68,32 +68,45 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: htcondor/mini
+      env:
+        PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/submituser/.local/bin
     steps:
-      - name: Change user
-        run: su - submituser
-
       - uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install Python and more yum
+        run: |
+          yum install -y python${{ env.PYTHON_VERSION }}
+          yum install -y python${{ env.PYTHON_VERSION }}-pip
+          yum install -y python${{ env.PYTHON_VERSION }}-devel
+          yum install -y gcc
+
+      - name: HTCondor master
+        run:  condor_master
+
+      - name: Test submit to HTCondor
+        run: su -c "condor_submit tests/sleep.sub" submituser
 
       - name: Install poetry
-        run: pip install poetry
+        run: su -c "pip${{ env.PYTHON_VERSION }} install poetry" submituser
 
       - name: Determine dependencies
-        run: poetry lock
-
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: poetry
+        run: su -c "poetry lock" submituser
 
       - name: Install dependencies
-        run: poetry install
+        run: su -c "poetry install" submituser
 
       - name: Run pytest
-        run: poetry run coverage run -m pytest tests/tests.py
+        run: su -c "poetry run coverage run -m pytest tests/tests.py -vvv" submituser
 
+      - name: Check HTCondor logs
+        run: |
+          ls  /tmp/pytest-of-submituser/pytest-0/test_simple_workflow0/simple/.snakemake/htcondor
+          for file in /tmp/pytest-of-submituser/pytest-0/test_simple_workflow0/simple/.snakemake/htcondor/*.log; do cat "$file"; done
+
+      - name: Check HTCondor errors
+        run: |
+          ls  /tmp/pytest-of-submituser/pytest-0/test_simple_workflow0/simple/.snakemake/htcondor
+          for file in /tmp/pytest-of-submituser/pytest-0/test_simple_workflow0/simple/.snakemake/htcondor/*.err; do cat "$file"; done
+  
       - name: Run Coverage
-        run: poetry run coverage report -m
+        run: su -c "poetry run coverage report -m --omit=Snakefile" submituser
