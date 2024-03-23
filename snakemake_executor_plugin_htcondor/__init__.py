@@ -187,7 +187,7 @@ class Executor(RemoteExecutor):
                             projection=["ExitBySignal", "ExitCode", "ExitSignal", "JobStatus"],
                         )
                         #  Storing the one event from HistoryIterator to list
-                        job_status = list(next(job_status))
+                        job_status = [next(job_status)]
                 except Exception as e:
                     self.logger.warning(f"Failed to retrieve HTCondor job status: {e}")
                     # Assuming the job is still running and retry next time
