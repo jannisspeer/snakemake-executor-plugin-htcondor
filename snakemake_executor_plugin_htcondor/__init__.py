@@ -159,7 +159,7 @@ class Executor(RemoteExecutor):
 
         self.logger.info(
             f"Job {job.jobid} submitted to HTCondor Cluster ID {submit_result.cluster()}\n"
-            f"The cluster logs are stored in {self.jobDir}/{submit_result.cluster()}.log"
+            f"The logs of the HTCondor job are stored in {self.jobDir}/{submit_result.cluster()}.log"
         )
 
         self.report_job_submission(
@@ -197,13 +197,15 @@ class Executor(RemoteExecutor):
                 )
 
                 # Overview of HTCondor job status:
-                # 1: Idle
-                # 2: Running
-                # 3: Removed
-                # 4: Completed
-                # 5: Held
-                # 6: Transferring Output
-                # 7: Suspended
+                status_dict = {
+                    "1": "Idle",
+                    "2": "Running",
+                    "3": "Removed",
+                    "4": "Completed",
+                    "5": "Held",
+                    "6": "Transferring Output",
+                    "7": "Suspended",
+                }
 
                 # Running/idle jobs
                 if job_status[0]["JobStatus"] in [1, 2, 6, 7]:
@@ -236,7 +238,7 @@ class Executor(RemoteExecutor):
                     self.report_job_error(
                         current_job,
                         msg=f"Job {current_job.job.jobid} with HTCondor Cluster ID {current_job.external_jobid} has "
-                        f"status {job_status[0]['JobStatus']}.",
+                        f"status {status_dict[str(job_status[0]['JobStatus'])]}.",
                     )
                 else:
                     raise WorkflowError(
