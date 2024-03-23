@@ -1,0 +1,5 @@
+# sleep.sub -- simple sleep job
+
+executable              = /bin/sleep
+arguments               = 5s
+queue
