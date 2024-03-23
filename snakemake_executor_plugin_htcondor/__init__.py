@@ -193,7 +193,7 @@ class Executor(RemoteExecutor):
                     # Assuming the job is still running and retry next time
                     yield current_job
                 self.logger.debug(
-                    f"HTCondor job {current_job.external_jobid} status: {job_status}"
+                    f"Job {current_job.jobid} with HTCondor Cluster ID {current_job.external_jobid} has status: {job_status[0]}"
                 )
 
                 # Overview of HTCondor job status:
@@ -207,32 +207,26 @@ class Executor(RemoteExecutor):
 
                 # Running/idle jobs
                 if job_status[0]["JobStatus"] in [1, 2, 6, 7]:
-                    self.logger.debug(
-                        f"HTCondor job {current_job.external_jobid} has "
-                        f"status {job_status[0]['JobStatus']}."
-                    )
                     if job_status[0]["JobStatus"] in [7]:
                         self.logger.warning(
-                            f"HTCondor job {current_job.external_jobid} is suspended."
+                            f"Job {current_job.jobid} with HTCondor Cluster ID {current_job.external_jobid} is suspended."
                         )
                     yield current_job
                 # Completed jobs
                 elif job_status[0]["JobStatus"] in [4]:
                     self.logger.debug(
-                        f"HTCondor job {current_job.external_jobid} has "
-                        f"status {job_status[0]['JobStatus']}."
-                         "Check whether the job was successful."
+                         f"Check whether Job {current_job.jobid} with HTCondor Cluster ID {current_job.external_jobid}was successful."
                     )
                     # Check ExitCode
                     if job_status[0]["ExitCode"] == 0:
                         # Job was successful
-                        self.logger.debug("Report job success")
+                        self.logger.debug(f"Report Job {current_job.jobid} with HTCondor Cluster ID {current_job.external_jobid} success")
                         self.report_job_success(current_job)
                     else:
-                        self.logger.debug("Report job error")
+                        self.logger.debug(f"Report Job {current_job.jobid} with HTCondor Cluster ID {current_job.external_jobid} error")
                         self.report_job_error(
                             current_job,
-                            msg=f"HTCondor job {current_job.external_jobid} has "
+                            msg=f"Job {current_job.jobid} with HTCondor Cluster ID {current_job.external_jobid} has "
                             f" status {job_status[0]['JobStatus']} but failed with"
                             f"ExitCode {job_status[0]['ExitCode']}.",
                         )
@@ -240,12 +234,12 @@ class Executor(RemoteExecutor):
                 elif job_status[0]["JobStatus"] in [3, 5]:
                     self.report_job_error(
                         current_job,
-                        msg=f"HTCondor job {current_job.external_jobid} has "
+                        msg=f"Job {current_job.jobid} with HTCondor Cluster ID {current_job.external_jobid} has "
                         f"status {job_status[0]['JobStatus']}.",
                     )
                 else:
                     raise WorkflowError(
-                        f"Unknown HTCondor job status: {job_status[0]['JobStatus']}"
+                        f"Job {current_job.jobid} with HTCondor Cluster ID {current_job.external_jobid} has unknown HTCondor job status: {job_status[0]['JobStatus']}"
                     )
 
     def cancel_jobs(self, active_jobs: List[SubmittedJobInfo]):
