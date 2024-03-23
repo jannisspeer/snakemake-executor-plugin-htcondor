@@ -178,13 +178,23 @@ class Executor(RemoteExecutor):
                     schedd = htcondor.Schedd()
                     job_status = schedd.query(
                         constraint=f"ClusterId == {current_job.external_jobid}",
-                        projection=["ExitBySignal", "ExitCode", "ExitSignal", "JobStatus"],
+                        projection=[
+                            "ExitBySignal",
+                            "ExitCode",
+                            "ExitSignal",
+                            "JobStatus",
+                        ],
                     )
                     # Job is not running anymore, look
                     if not job_status:
                         job_status = schedd.history(
                             constraint=f"ClusterId == {current_job.external_jobid}",
-                            projection=["ExitBySignal", "ExitCode", "ExitSignal", "JobStatus"],
+                            projection=[
+                                "ExitBySignal",
+                                "ExitCode",
+                                "ExitSignal",
+                                "JobStatus",
+                            ],
                         )
                         #  Storing the one event from HistoryIterator to list
                         job_status = [next(job_status)]
@@ -217,16 +227,22 @@ class Executor(RemoteExecutor):
                 # Completed jobs
                 elif job_status[0]["JobStatus"] in [4]:
                     self.logger.debug(
-                         f"Check whether Job {current_job.job.jobid} with HTCondor Cluster ID {current_job.external_jobid} was successful."
+                        f"Check whether Job {current_job.job.jobid} with HTCondor Cluster ID {current_job.external_jobid} was successful."
                     )
                     # Check ExitCode
                     if job_status[0]["ExitCode"] == 0:
                         # Job was successful
-                        self.logger.debug(f"Report Job {current_job.job.jobid} with HTCondor Cluster ID {current_job.external_jobid} success")
-                        self.logger.info(f"Job {current_job.job.jobid} with HTCondor Cluster ID {current_job.external_jobid} was successful.")
+                        self.logger.debug(
+                            f"Report Job {current_job.job.jobid} with HTCondor Cluster ID {current_job.external_jobid} success"
+                        )
+                        self.logger.info(
+                            f"Job {current_job.job.jobid} with HTCondor Cluster ID {current_job.external_jobid} was successful."
+                        )
                         self.report_job_success(current_job)
                     else:
-                        self.logger.debug(f"Report Job {current_job.job.jobid} with HTCondor Cluster ID {current_job.external_jobid} error")
+                        self.logger.debug(
+                            f"Report Job {current_job.job.jobid} with HTCondor Cluster ID {current_job.external_jobid} error"
+                        )
                         self.report_job_error(
                             current_job,
                             msg=f"Job {current_job.job.jobid} with HTCondor Cluster ID {current_job.external_jobid} has "
