@@ -159,7 +159,7 @@ class Executor(RemoteExecutor):
 
         self.logger.info(
             f"Job {job.jobid} submitted to "
-            "HTCondor Cluster ID {submit_result.cluster()}\n"
+            f"HTCondor Cluster ID {submit_result.cluster()}\n"
             f"The logs of the HTCondor job are stored "
             f"in {self.jobDir}/{submit_result.cluster()}.log"
         )
@@ -262,7 +262,7 @@ class Executor(RemoteExecutor):
                             "HTCondor Cluster ID "
                             f"{current_job.external_jobid} has "
                             f" status {status_dict[str(job_status[0]['JobStatus'])]}, "
-                            "but failed with"
+                            "but failed with "
                             f"ExitCode {job_status[0]['ExitCode']}.",
                         )
                 # Errored jobs
