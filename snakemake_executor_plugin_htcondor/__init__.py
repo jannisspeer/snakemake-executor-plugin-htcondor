@@ -72,26 +72,33 @@ class Executor(RemoteExecutor):
         # access executor specific settings
         self.workflow.executor_settings
 
+        # jobDir: Directory where the job will tore log, output and error files.
+        self.jobDir = self.workflow.executor_settings.jobdir
+
     def run_job(self, job: JobExecutorInterface):
         # Submitting job to HTCondor
 
-        print(job)
-        print(job.name)
-        print(job.resources)
-
         # Creating directory to store log, output and error files
-        jobDir = self.workflow.executor_settings.jobdir
-        makedirs(jobDir, exist_ok=True)
+        makedirs(self.jobDir, exist_ok=True)
+
+        job_exec = self.get_python_executable()
+        job_args = self.format_job_exec(job).removeprefix(job_exec + " ")
+
+        # HTCondor cannot handle single quotes
+        if "'" in job_args:
+            job_args = job_args.replace("'", "")
+            self.logger.warning(
+                "The job argument contains a single quote. "
+                "Removing it to avoid issues with HTCondor."
+            )
 
         # Creating submit dictionary which is passed to htcondor.Submit
         submit_dict = {
-            "executable": "/bin/bash",
-            "arguments": self.format_job_exec(
-                job
-            ),  # using the method from RemoteExecutor
-            "log": join(jobDir, "$(ClusterId).log"),
-            "output": join(jobDir, "$(ClusterId).out"),
-            "error": join(jobDir, "$(ClusterId).err"),
+            "executable": job_exec,
+            "arguments": job_args,
+            "log": join(self.jobDir, "$(ClusterId).log"),
+            "output": join(self.jobDir, "$(ClusterId).out"),
+            "error": join(self.jobDir, "$(ClusterId).err"),
             "request_cpus": str(job.threads),
         }
 
@@ -146,11 +153,20 @@ class Executor(RemoteExecutor):
 
         # Submitting job to HTCondor
         try:
-            clusterID = schedd.submit(submit_description)
+            submit_result = schedd.submit(submit_description)
         except Exception as e:
             raise WorkflowError(f"Failed to submit HTCondor job: {e}")
 
-        self.report_job_submission(SubmittedJobInfo(job=job, external_jobid=clusterID))
+        self.logger.info(
+            f"Job {job.jobid} submitted to "
+            "HTCondor Cluster ID {submit_result.cluster()}\n"
+            f"The logs of the HTCondor job are stored "
+            f"in {self.jobDir}/{submit_result.cluster()}.log"
+        )
+
+        self.report_job_submission(
+            SubmittedJobInfo(job=job, external_jobid=submit_result.cluster())
+        )
 
     async def check_active_jobs(
         self, active_jobs: List[SubmittedJobInfo]
@@ -159,46 +175,111 @@ class Executor(RemoteExecutor):
 
         for current_job in active_jobs:
             async with self.status_rate_limiter:
-                # Get the status of the job
+                # Get the status of the job from HTCondor
                 try:
                     schedd = htcondor.Schedd()
                     job_status = schedd.query(
                         constraint=f"ClusterId == {current_job.external_jobid}",
-                        projection=["JobStatus"],
+                        projection=[
+                            "ExitBySignal",
+                            "ExitCode",
+                            "ExitSignal",
+                            "JobStatus",
+                        ],
                     )
+                    # Job is not running anymore, look
+                    if not job_status:
+                        job_status = schedd.history(
+                            constraint=f"ClusterId == {current_job.external_jobid}",
+                            projection=[
+                                "ExitBySignal",
+                                "ExitCode",
+                                "ExitSignal",
+                                "JobStatus",
+                            ],
+                        )
+                        #  Storing the one event from HistoryIterator to list
+                        job_status = [next(job_status)]
                 except Exception as e:
                     self.logger.warning(f"Failed to retrieve HTCondor job status: {e}")
                     # Assuming the job is still running and retry next time
                     yield current_job
                 self.logger.debug(
-                    f"HTCondor job {current_job.external_jobid} status: {job_status}"
+                    f"Job {current_job.job.jobid} with HTCondor Cluster ID "
+                    f"{current_job.external_jobid} has status: {job_status}"
                 )
 
                 # Overview of HTCondor job status:
-                # 1: Idle
-                # 2: Running
-                # 3: Removed
-                # 4: Completed
-                # 5: Held
-                # 6: Transferring Output
-                # 7: Suspended
+                status_dict = {
+                    "1": "Idle",
+                    "2": "Running",
+                    "3": "Removed",
+                    "4": "Completed",
+                    "5": "Held",
+                    "6": "Transferring Output",
+                    "7": "Suspended",
+                }
 
                 # Running/idle jobs
                 if job_status[0]["JobStatus"] in [1, 2, 6, 7]:
                     if job_status[0]["JobStatus"] in [7]:
                         self.logger.warning(
-                            f"HTCondor job {current_job.external_jobid} is suspended."
+                            f"Job {current_job.job.jobid} with "
+                            "HTCondor Cluster ID "
+                            f"{current_job.external_jobid} is suspended."
                         )
                     yield current_job
-                # Successful jobs
+                # Completed jobs
                 elif job_status[0]["JobStatus"] in [4]:
-                    self.report_job_success(current_job)
+                    self.logger.debug(
+                        f"Check whether Job {current_job.job.jobid} with "
+                        "HTCondor Cluster ID "
+                        f"{current_job.external_jobid} was successful."
+                    )
+                    # Check ExitCode
+                    if job_status[0]["ExitCode"] == 0:
+                        # Job was successful
+                        self.logger.debug(
+                            f"Report Job {current_job.job.jobid} with "
+                            "HTCondor Cluster ID "
+                            f"{current_job.external_jobid} success"
+                        )
+                        self.logger.info(
+                            f"Job {current_job.job.jobid} with "
+                            "HTCondor Cluster ID "
+                            f"{current_job.external_jobid} was successful."
+                        )
+                        self.report_job_success(current_job)
+                    else:
+                        self.logger.debug(
+                            f"Report Job {current_job.job.jobid} with "
+                            "HTCondor Cluster ID "
+                            f"{current_job.external_jobid} error"
+                        )
+                        self.report_job_error(
+                            current_job,
+                            msg=f"Job {current_job.job.jobid} with "
+                            "HTCondor Cluster ID "
+                            f"{current_job.external_jobid} has "
+                            f" status {status_dict[str(job_status[0]['JobStatus'])]}, "
+                            "but failed with"
+                            f"ExitCode {job_status[0]['ExitCode']}.",
+                        )
                 # Errored jobs
                 elif job_status[0]["JobStatus"] in [3, 5]:
-                    self.report_job_error(current_job)
+                    self.report_job_error(
+                        current_job,
+                        msg=f"Job {current_job.job.jobid} with "
+                        "HTCondor Cluster ID "
+                        f"{current_job.external_jobid} has "
+                        f"status {status_dict[str(job_status[0]['JobStatus'])]}.",
+                    )
                 else:
                     raise WorkflowError(
-                        f"Unknown HTCondor job status: {job_status[0]['JobStatus']}"
+                        f"Job {current_job.job.jobid} with "
+                        "HTCondor Cluster ID "
+                        f"{current_job.external_jobid} has "
+                        f"unknown HTCondor job status: {job_status[0]['JobStatus']}"
                     )
 
     def cancel_jobs(self, active_jobs: List[SubmittedJobInfo]):
@@ -208,6 +289,8 @@ class Executor(RemoteExecutor):
         if active_jobs:
             schedd = htcondor.Schedd()
             job_ids = [current_job.external_jobid for current_job in active_jobs]
+            # For some reason HTCondor requires not the BATCH_NAME but the full JOB_IDS
+            job_ids = [f"ClusterId == {x}.0" for x in job_ids]
             self.logger.debug(f"Cancelling HTCondor jobs: {job_ids}")
             try:
                 schedd.act(htcondor.JobAction.Remove, job_ids)
