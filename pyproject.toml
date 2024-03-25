@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "snakemake-executor-plugin-htcondor"
-version = "0.1.1"
+version = "0.1.2"
 description = "A Snakemake executor plugin for submitting jobs to a HTCondor cluster."
 authors = [ "Jannis Speer <jannis.speer@tutanota.com>",]
 readme = "README.md"
