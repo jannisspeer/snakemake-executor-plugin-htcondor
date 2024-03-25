@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/jannisspeer/snakemake-executor-plugin-htcondor/compare/v0.1.0...v0.1.1) (2024-03-25)
+
+
+### Documentation
+
+* improved documentation ([#8](https://github.com/jannisspeer/snakemake-executor-plugin-htcondor/issues/8)) ([f8d0744](https://github.com/jannisspeer/snakemake-executor-plugin-htcondor/commit/f8d07440cd4a40d5eca00c35f1d094694681e5cf))
+
 ## 0.1.0 (2024-03-23)
 
 
